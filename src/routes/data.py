@@ -3,9 +3,10 @@ import logging
 import aiofiles
 from fastapi import APIRouter, Depends, UploadFile, status
 from fastapi.responses import JSONResponse
-from pydantic.json_schema import JsonRef
 
 from src.controllers import DataController, ProjectController
+from src.controllers.ProcessController import ProcessController
+from src.schemes.data import ProcessRequest
 from src.utils.config import Settings, get_settings
 
 logger = logging.getLogger("uvicorn.error")
@@ -42,3 +43,27 @@ async def upload_data(
             content={"signal": "File upload failed"},
         )
     return JSONResponse(content={"signal": "File uploaded", "file_id": file_id})
+
+
+@data_router.post("/process/{project_id}")
+async def process_endpoint(project_id: str, process_request: ProcessRequest):
+    file_id = process_request.file_id
+    chunk_size = process_request.chunk_size
+    overlap_size = process_request.overlap_size
+
+    process_controller = ProcessController(project_id=project_id)
+
+    file_content = process_controller.get_file_content(file_id=file_id)
+    file_chunks = process_controller.process_file_content(
+        file_content=file_content,
+        file_id=file_id,
+        chunk_size=chunk_size,  # type: ignore
+        overlap_size=overlap_size,  # type: ignore
+    )
+
+    if file_chunks is None or len(file_chunks) == 1:  # type: ignore
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"signal": "Processing failed"},
+        )
+    return file_chunks
